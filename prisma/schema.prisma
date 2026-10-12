@@ -1,0 +1,387 @@
+// Prisma Schema for HealthVault AI: AI-Powered Digital Health Records Platform
+// Software Engineering Academic Project
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentType {
+  IN_PERSON
+  TELEHEALTH
+}
+
+enum RecordType {
+  CONSULTATION
+  CHECKUP
+  EMERGENCY
+  SPECIALIST
+  LAB_REVIEW
+}
+
+enum RecordStatus {
+  COMPLETED
+  UNDER_REVIEW
+  DRAFT
+}
+
+enum PrescriptionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+enum DocumentType {
+  LAB_REPORT
+  PRESCRIPTION
+  SCAN_REPORT
+  MEDICAL_CERTIFICATE
+  INSURANCE_DOCUMENT
+  OTHER
+}
+
+enum NotificationType {
+  APPOINTMENT
+  RECORD
+  PRESCRIPTION
+  MESSAGE
+  SYSTEM
+}
+
+enum AuditStatus {
+  SUCCESS
+  WARNING
+  DENIED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  role          Role           @default(PATIENT)
+  phone         String?
+  avatar        String?
+  status        String         @default("active")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastLogin     DateTime?
+
+  // Profile relations
+  patient       Patient?
+  doctor        Doctor?
+  adminProfile  AdminProfile?
+
+  // Activity relations
+  notifications Notification[]
+  sentMessages  Message[]      @relation("SentMessages")
+  recvMessages  Message[]      @relation("ReceivedMessages")
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  iconName    String?
+  doctors     Doctor[]
+  createdAt   DateTime @default(now())
+}
+
+model Patient {
+  id                    String            @id @default(uuid())
+  patientId             String            @unique // e.g. HV-PAT-1082
+  userId                String            @unique
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dob                   DateTime
+  gender                Gender
+  bloodGroup            BloodGroup
+  address               String?
+  emergencyContactName  String
+  emergencyContactPhone String
+  emergencyContactRel   String
+  allergies             String[]          @default([])
+  existingConditions    String[]          @default([])
+  currentMedications    String[]          @default([])
+  previousSurgeries     String[]          @default([])
+  insuranceProvider     String?
+  insurancePolicyNumber String?
+
+  // Relations
+  appointments          Appointment[]
+  medicalRecords        MedicalRecord[]
+  prescriptions         Prescription[]
+  documents             MedicalDocument[]
+  vitals                Vital[]
+  aiAnalyses            AIHealthAnalysis[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([patientId])
+}
+
+model Doctor {
+  id              String          @id @default(uuid())
+  doctorId        String          @unique // e.g. HV-DOC-402
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization  String
+  departmentId    String
+  department      Department      @relation(fields: [departmentId], references: [id])
+  experienceYears Int             @default(0)
+  rating          Float           @default(5.0)
+  roomNumber      String
+  hospital        String          @default("HealthVault Central Hospital")
+  bio             String?
+  availableDays   String[]        @default(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+  availableHours  String[]        @default(["09:00 AM", "10:30 AM", "02:00 PM", "03:30 PM"])
+
+  // Relations
+  appointments    Appointment[]
+  medicalRecords  MedicalRecord[]
+  prescriptions   Prescription[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([doctorId])
+}
+
+model AdminProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department String   @default("System Administration")
+  clearance  String   @default("Level 3 - Full Medical Audit")
+  createdAt  DateTime @default(now())
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  patientId   String
+  patient     Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId    String
+  doctor      Doctor            @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  date        DateTime
+  timeSlot    String
+  type        AppointmentType   @default(IN_PERSON)
+  reason      String
+  status      AppointmentStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([date])
+}
+
+model MedicalRecord {
+  id              String         @id @default(uuid())
+  recordNumber    String         @unique // e.g. MR-2026-892
+  patientId       String
+  patient         Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId        String
+  doctor          Doctor         @relation(fields: [doctorId], references: [id])
+  visitDate       DateTime
+  symptoms        String[]
+  diagnosis       String
+  treatmentPlan   String
+  doctorNotes     String
+  recordType      RecordType     @default(CONSULTATION)
+  status          RecordStatus   @default(COMPLETED)
+
+  // Sub-entities
+  vitals          Vital?
+  labResults      LabResult[]
+  prescriptions   Prescription[]
+  attachments     Attachment[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([recordNumber])
+}
+
+model Vital {
+  id               String         @id @default(uuid())
+  patientId        String
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medicalRecordId  String?        @unique
+  medicalRecord    MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
+  date             DateTime       @default(now())
+  bpSystolic       Int
+  bpDiastolic      Int
+  heartRate        Int
+  bloodGlucose     Float?
+  temperature      Float
+  weight           Float
+  bmi              Float
+  oxygenSaturation Int            @default(98)
+  respiratoryRate  Int            @default(16)
+
+  @@index([patientId])
+}
+
+model LabResult {
+  id              String        @id @default(uuid())
+  medicalRecordId String
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  testName        String
+  result          String
+  referenceRange  String
+  status          String // normal, elevated, critical, low
+}
+
+model Prescription {
+  id                 String             @id @default(uuid())
+  prescriptionNumber String             @unique
+  patientId          String
+  patient            Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId           String
+  doctor             Doctor             @relation(fields: [doctorId], references: [id])
+  medicalRecordId    String?
+  medicalRecord      MedicalRecord?     @relation(fields: [medicalRecordId], references: [id])
+  medicine           String
+  dosage             String
+  frequency          String
+  duration           String
+  instructions       String
+  startDate          DateTime
+  endDate            DateTime
+  status             PrescriptionStatus @default(ACTIVE)
+  createdAt          DateTime           @default(now())
+
+  @@index([patientId])
+  @@index([prescriptionNumber])
+}
+
+model MedicalDocument {
+  id         String       @id @default(uuid())
+  patientId  String
+  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title      String
+  type       DocumentType
+  fileName   String
+  fileSize   String
+  fileType   String
+  uploadedBy String
+  notes      String?
+  uploadedAt DateTime     @default(now())
+
+  @@index([patientId])
+}
+
+model Attachment {
+  id              String        @id @default(uuid())
+  medicalRecordId String
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  name            String
+  size            String
+  type            String
+  url             String?
+}
+
+model AIHealthAnalysis {
+  id                     String   @id @default(uuid())
+  patientId              String
+  patient                Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  query                  String
+  symptoms               String[]
+  summary                String
+  possibleConsiderations String[]
+  relevantMedicalRecords String[]
+  suggestedNextSteps     String[]
+  warningSigns           String[]
+  questionsToAskDoctor   String[]
+  disclaimer             String
+  createdAt              DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(SYSTEM)
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String
+  userRole  Role
+  action    String
+  resource  String
+  ipAddress String
+  status    AuditStatus @default(SUCCESS)
+  details   String?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+}

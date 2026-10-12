@@ -1,0 +1,6 @@
+{
+  "name": "HealthVault AI - Digital Health Records Platform",
+  "description": "AI-Powered Digital Health Records Platform. Smarter Records. Better Care. Secure clinical records, role-based dashboards, AI-assisted health insights, and appointment management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
